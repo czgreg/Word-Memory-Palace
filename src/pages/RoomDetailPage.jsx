@@ -16,6 +16,7 @@ const RoomDetailPage = () => {
     const [story, setStory] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [batchInput, setBatchInput] = useState('');
     const [activeLoadingIdx, setActiveLoadingIdx] = useState(null);
 
     const fetchData = useCallback(async () => {
@@ -52,17 +53,13 @@ const RoomDetailPage = () => {
         setWords(newWords);
     };
 
-    const handleAutoFill = async (index) => {
-        const word = words[index].word.trim();
-        if (!word) return;
-
-        setActiveLoadingIdx(index);
+    const fetchWordDetails = async (word) => {
         try {
-            // Fetch from Free Dictionary API for phonetics and POS
-            const dictRes = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+            // Dictionary API
+            const dictRes = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
             const dictData = await dictRes.json();
 
-            // Fetch from Google Translate API (free tier) for Chinese meaning
+            // Translation API
             const transRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(word)}`);
             const transData = await transRes.json();
 
@@ -75,25 +72,82 @@ const RoomDetailPage = () => {
                 pos = dictData[0].meanings?.[0]?.partOfSpeech || '';
             }
 
-            const newWords = [...words];
-            newWords[index] = {
-                ...newWords[index],
-                phonetic: phonetic || newWords[index].phonetic,
-                meaning: pos ? `[${pos}] ${meaning}` : meaning
-            };
-            setWords(newWords);
+            return { phonetic, meaning: pos ? `[${pos}] ${meaning}` : meaning };
         } catch (err) {
-            console.error("自动识别失败:", err);
-            alert("自动识别失败，请检查网络或单词拼写。");
-        } finally {
-            setActiveLoadingIdx(null);
+            return { phonetic: '', meaning: '' };
         }
     };
 
-    const handleSave = async () => {
+    const handleAutoFill = async (index) => {
+        const word = words[index].word.trim();
+        if (!word) return;
+
+        setActiveLoadingIdx(index);
+        const details = await fetchWordDetails(word);
+        const newWords = [...words];
+        newWords[index] = { ...newWords[index], ...details };
+        setWords(newWords);
+        setActiveLoadingIdx(null);
+    };
+
+    const handleBatchImport = async () => {
+        // Updated regex to handle: "- **word**：meaning", "* word: meaning", "word: meaning"
+        const lines = batchInput.split('\n').map(l => l.trim()).filter(l => l);
+        const parsedItems = lines.map(line => {
+            // 1. Remove list markers like "-", "*", "1." at the start
+            let cleanLine = line.replace(/^[\-\*\d\.]+\s*/, '').trim();
+
+            // 2. Identify word and meaning. Support split by : or ： or first space
+            // Regex to match "word", possibly wrapped in **
+            const parts = cleanLine.split(/[:：]/);
+            let wordPart = parts[0]?.trim() || '';
+            let meaningPart = parts.slice(1).join(':').trim(); // Rejoin in case meaning contains :
+
+            // If no colon found, try split by space
+            if (parts.length === 1) {
+                const spaceIdx = cleanLine.search(/\s/);
+                if (spaceIdx !== -1) {
+                    wordPart = cleanLine.substring(0, spaceIdx).trim();
+                    meaningPart = cleanLine.substring(spaceIdx).trim();
+                }
+            }
+
+            // 3. Remove markdown bold/italic from word (**word**, *word*, etc.)
+            const finalWord = wordPart.replace(/[\*\_\~]+/g, '').trim();
+
+            return { word: finalWord, manualMeaning: meaningPart };
+        }).filter(item => item.word).slice(0, 10);
+
+        if (parsedItems.length === 0) {
+            alert("未能识别出有效的单词格式，请检查输入。");
+            return;
+        }
+
+        setIsSaving(true);
+        const updatedWords = [...words];
+
+        for (let i = 0; i < parsedItems.length; i++) {
+            const { word, manualMeaning } = parsedItems[i];
+            updatedWords[i] = { ...updatedWords[i], word };
+
+            // Auto fill details while respecting manual meaning
+            const details = await fetchWordDetails(word);
+
+            updatedWords[i] = {
+                ...updatedWords[i],
+                phonetic: details.phonetic || updatedWords[i].phonetic,
+                meaning: manualMeaning || details.meaning || updatedWords[i].meaning
+            };
+        }
+
+        setWords(updatedWords);
+        setBatchInput('');
+        setIsSaving(false);
+    };
+
+    const handleSave = async (silent = false) => {
         setIsSaving(true);
         try {
-            // Save words
             for (let i = 0; i < words.length; i++) {
                 const w = words[i];
                 if (w.word.trim()) {
@@ -102,17 +156,23 @@ const RoomDetailPage = () => {
                     await wordRepository.delete(w.id);
                 }
             }
-
-            // Save story
             await storyRepository.upsert(id, story);
-
-            alert("保存成功！");
-            fetchData(); // Reload to get IDs
+            if (!silent) alert("保存成功！");
+            fetchData();
+            return true;
         } catch (err) {
             console.error("保存失败:", err);
             alert("保存失败，请重试。");
+            return false;
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleLearnWithSave = async () => {
+        const success = await handleSave(true);
+        if (success) {
+            navigate(`/room/${id}/learn`);
         }
     };
 
@@ -120,26 +180,66 @@ const RoomDetailPage = () => {
         if (!story) return <span style={{ color: 'var(--text-muted)' }}>尚未编写故事...</span>;
 
         const validWords = words.map(w => w.word.trim().toLowerCase()).filter(w => w);
-        if (validWords.length === 0) return story;
-
-        // Sort by length descending to avoid partial matches
         validWords.sort((a, b) => b.length - a.length);
 
-        const regex = new RegExp(`(${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-        const parts = story.split(regex);
+        const lines = story.split('\n');
 
-        return parts.map((part, i) => {
-            const isMatch = validWords.includes(part.toLowerCase());
-            return isMatch ? (
-                <span key={i} style={{
-                    color: 'var(--primary)',
-                    fontWeight: 'bold',
-                    borderBottom: '2px solid var(--primary)',
-                    padding: '0 2px'
-                }}>
-                    {part}
+        return lines.map((line, lineIdx) => {
+            let content = line;
+            let style = { display: 'block', marginBottom: '0.5rem' };
+
+            // 1. Handle Headings
+            if (line.startsWith('# ')) {
+                style = { ...style, fontSize: '1.75rem', fontWeight: '900', color: 'var(--accent)', marginTop: '1rem' };
+                content = line.substring(2);
+            } else if (line.startsWith('## ')) {
+                style = { ...style, fontSize: '1.4rem', fontWeight: '800', color: 'var(--secondary)', marginTop: '0.75rem' };
+                content = line.substring(3);
+            } else if (line.startsWith('### ')) {
+                style = { ...style, fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)', marginTop: '0.5rem' };
+                content = line.substring(4);
+            }
+
+            // 2. Fragment rendering (Bold + Words)
+            const renderFragments = (text) => {
+                if (validWords.length === 0 && !text.includes('**')) return text;
+
+                // Regex for both bold and valid words
+                const wordRegexPart = validWords.length > 0
+                    ? `|${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}`
+                    : '';
+                const regex = new RegExp(`(\\*{2}.+?\\*{2}${wordRegexPart})`, 'gi');
+                const parts = text.split(regex);
+
+                return parts.map((part, i) => {
+                    // Check if Bold
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                        return <strong key={i} style={{ color: 'var(--warning)' }}>{part.slice(2, -2)}</strong>;
+                    }
+                    // Check if Word Match
+                    const isMatch = validWords.includes(part.toLowerCase());
+                    if (isMatch) {
+                        return (
+                            <span key={i} style={{
+                                color: 'var(--text)',
+                                fontWeight: 'bold',
+                                borderBottom: '2px solid var(--primary)',
+                                background: 'rgba(99, 102, 241, 0.2)',
+                                padding: '0 2px'
+                            }}>
+                                {part}
+                            </span>
+                        );
+                    }
+                    return part;
+                });
+            };
+
+            return (
+                <span key={lineIdx} style={style}>
+                    {renderFragments(content)}
                 </span>
-            ) : part;
+            );
         });
     };
 
@@ -165,72 +265,99 @@ const RoomDetailPage = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <Link to={`/room/${id}/learn`} className="btn btn-secondary">
-                        <Play size={18} />
-                        <span>进入预览</span>
-                    </Link>
-                    <button onClick={handleSave} className="btn btn-primary" disabled={isSaving}>
+                    <button onClick={handleLearnWithSave} className="btn btn-secondary" disabled={isSaving}>
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+                        <span>保存并预览</span>
+                    </button>
+                    <button onClick={() => handleSave()} className="btn btn-primary" disabled={isSaving}>
                         {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                         <span>保存更改</span>
                     </button>
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
                 {/* Left Column: Words */}
-                <div className="glass-card" style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                        <Info size={18} color="var(--primary)" />
-                        <h2 style={{ fontSize: '1.25rem' }}>本房间单词 (最多10个)</h2>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div className="glass-card" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Info size={18} color="var(--primary)" />
+                                <h2 style={{ fontSize: '1.25rem' }}>单词录入 (最多10个)</h2>
+                            </div>
+                        </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {words.map((w, index) => (
-                            <div key={index} style={{
-                                display: 'grid',
-                                gridTemplateColumns: '30px 1fr 1fr 1.5fr 44px',
-                                gap: '0.5rem',
-                                alignItems: 'center',
-                                background: 'var(--glass-bg)',
-                                padding: '0.5rem',
-                                borderRadius: '0.75rem'
-                            }}>
-                                <span style={{ color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.8rem' }}>{index + 1}</span>
-                                <input
-                                    type="text"
-                                    placeholder="单词"
+                        {/* Batch Input Section */}
+                        <div style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.75rem' }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>批量导入 (多个单词用换行或逗号分隔):</p>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <textarea
                                     className="input-field"
-                                    style={{ padding: '0.5rem' }}
-                                    value={w.word}
-                                    onChange={(e) => handleWordChange(index, 'word', e.target.value)}
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="音标"
-                                    className="input-field"
-                                    style={{ padding: '0.5rem' }}
-                                    value={w.phonetic}
-                                    onChange={(e) => handleWordChange(index, 'phonetic', e.target.value)}
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="中文释义"
-                                    className="input-field"
-                                    style={{ padding: '0.5rem' }}
-                                    value={w.meaning}
-                                    onChange={(e) => handleWordChange(index, 'meaning', e.target.value)}
+                                    placeholder="apple, banana, orange..."
+                                    style={{ flex: 1, height: '40px', minHeight: 'auto', padding: '0.5rem' }}
+                                    value={batchInput}
+                                    onChange={(e) => setBatchInput(e.target.value)}
                                 />
                                 <button
-                                    className="btn btn-secondary"
-                                    style={{ padding: '0.5rem', borderRadius: '0.5rem', opacity: w.word ? 1 : 0.3 }}
-                                    onClick={() => handleAutoFill(index)}
-                                    disabled={!w.word || activeLoadingIdx !== null}
-                                    title="自动识别"
+                                    className="btn btn-primary"
+                                    onClick={handleBatchImport}
+                                    disabled={!batchInput.trim() || isSaving}
+                                    style={{ padding: '0 1rem' }}
                                 >
-                                    {activeLoadingIdx === index ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                    {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Wand2 size={16} />}
+                                    <span>一键解析</span>
                                 </button>
                             </div>
-                        ))}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {words.map((w, index) => (
+                                <div key={index} style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '30px 1fr 1fr 1.5fr 44px',
+                                    gap: '0.5rem',
+                                    alignItems: 'center',
+                                    background: 'var(--glass-bg)',
+                                    padding: '0.5rem',
+                                    borderRadius: '0.75rem'
+                                }}>
+                                    <span style={{ color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.8rem' }}>{index + 1}</span>
+                                    <input
+                                        type="text"
+                                        placeholder="单词"
+                                        className="input-field"
+                                        style={{ padding: '0.5rem' }}
+                                        value={w.word}
+                                        onChange={(e) => handleWordChange(index, 'word', e.target.value)}
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="音标"
+                                        className="input-field"
+                                        style={{ padding: '0.5rem' }}
+                                        value={w.phonetic}
+                                        onChange={(e) => handleWordChange(index, 'phonetic', e.target.value)}
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="中文释义"
+                                        className="input-field"
+                                        style={{ padding: '0.5rem' }}
+                                        value={w.meaning}
+                                        onChange={(e) => handleWordChange(index, 'meaning', e.target.value)}
+                                    />
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: '0.5rem', borderRadius: '0.5rem', opacity: w.word ? 1 : 0.3 }}
+                                        onClick={() => handleAutoFill(index)}
+                                        disabled={!w.word || activeLoadingIdx !== null}
+                                        title="自动识别"
+                                    >
+                                        {activeLoadingIdx === index ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -252,15 +379,7 @@ const RoomDetailPage = () => {
 
                     <div className="glass-card" style={{ padding: '1.5rem' }}>
                         <h3 style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>故事预览 (即时高亮)</h3>
-                        <div style={{
-                            lineHeight: '1.8',
-                            fontSize: '1.1rem',
-                            background: 'rgba(0,0,0,0.2)',
-                            padding: '1rem',
-                            borderRadius: '0.75rem',
-                            minHeight: '100px',
-                            whiteSpace: 'pre-wrap'
-                        }}>
+                        <div style={{ lineHeight: '1.8', fontSize: '1.1rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.75rem', minHeight: '100px', whiteSpace: 'pre-wrap' }}>
                             {renderHighlightedStory()}
                         </div>
                     </div>

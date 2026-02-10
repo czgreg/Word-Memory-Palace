@@ -63,35 +63,72 @@ const LearnPage = () => {
         if (!story) return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>暂无故事内容</div>;
 
         const validWords = words.map(w => w.word.toLowerCase());
-        if (validWords.length === 0) return story;
-
         validWords.sort((a, b) => b.length - a.length);
-        const regex = new RegExp(`(${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-        const parts = story.split(regex);
 
-        return parts.map((part, i) => {
-            const w = wordMap[part.toLowerCase()];
-            if (w) {
-                return (
-                    <span
-                        key={i}
-                        onClick={() => speak(part)}
-                        style={{
-                            color: 'var(--primary)',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            textDecoration: 'underline dotted',
-                            transition: 'all 0.2s ease',
-                            padding: '0 2px'
-                        }}
-                        onMouseOver={(e) => e.target.style.background = 'var(--primary-glow)'}
-                        onMouseOut={(e) => e.target.style.background = 'transparent'}
-                    >
-                        {part}
-                    </span>
-                );
+        const lines = story.split('\n');
+
+        return lines.map((line, lineIdx) => {
+            let content = line;
+            let style = { display: 'block', marginBottom: '0.5rem' };
+
+            // 1. Handle Headings
+            if (line.startsWith('# ')) {
+                style = { ...style, fontSize: '1.75rem', fontWeight: '900', color: 'var(--accent)', marginTop: '1rem' };
+                content = line.substring(2);
+            } else if (line.startsWith('## ')) {
+                style = { ...style, fontSize: '1.4rem', fontWeight: '800', color: 'var(--secondary)', marginTop: '0.75rem' };
+                content = line.substring(3);
+            } else if (line.startsWith('### ')) {
+                style = { ...style, fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)', marginTop: '0.5rem' };
+                content = line.substring(4);
             }
-            return part;
+
+            // 2. Fragment rendering (Bold + Interactive Words)
+            const renderFragments = (text) => {
+                const wordRegexPart = validWords.length > 0
+                    ? `|${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}`
+                    : '';
+                const regex = new RegExp(`(\\*{2}.+?\\*{2}${wordRegexPart})`, 'gi');
+                const parts = text.split(regex);
+
+                return parts.map((part, i) => {
+                    // Check if Bold
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                        return <strong key={i} style={{ color: 'var(--warning)' }}>{part.slice(2, -2)}</strong>;
+                    }
+
+                    // Check if Word Match
+                    const w = wordMap[part.toLowerCase()];
+                    if (w) {
+                        return (
+                            <span
+                                key={i}
+                                onClick={() => speak(part)}
+                                style={{
+                                    color: 'var(--text)',
+                                    fontWeight: 'bold',
+                                    borderBottom: '2px solid var(--primary)',
+                                    background: 'rgba(99, 102, 241, 0.15)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    padding: '0 2px'
+                                }}
+                                onMouseOver={(e) => e.target.style.background = 'var(--primary-glow)'}
+                                onMouseOut={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.15)'}
+                            >
+                                {part}
+                            </span>
+                        );
+                    }
+                    return part;
+                });
+            };
+
+            return (
+                <div key={lineIdx} style={style}>
+                    {renderFragments(content)}
+                </div>
+            );
         });
     };
 
