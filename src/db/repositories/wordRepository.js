@@ -8,16 +8,16 @@ export const wordRepository = {
         );
     },
 
-    upsert: async (id, roomId, word, phonetic, meaning, orderIndex) => {
+    upsert: async (id, roomId, word, phonetic, partOfSpeech, meaning, orderIndex) => {
         if (id) {
             return dbService.run(
-                `UPDATE words SET word = ?, phonetic = ?, meaning = ?, order_index = ? WHERE id = ?`,
-                [word, phonetic, meaning, orderIndex, id]
+                `UPDATE words SET word = ?, phonetic = ?, part_of_speech = ?, meaning = ?, order_index = ? WHERE id = ?`,
+                [word, phonetic, partOfSpeech, meaning, orderIndex, id]
             );
         } else {
             return dbService.run(
-                `INSERT INTO words (room_id, word, phonetic, meaning, order_index) VALUES (?, ?, ?, ?, ?)`,
-                [roomId, word, phonetic, meaning, orderIndex]
+                `INSERT INTO words (room_id, word, phonetic, part_of_speech, meaning, order_index) VALUES (?, ?, ?, ?, ?, ?)`,
+                [roomId, word, phonetic, partOfSpeech, meaning, orderIndex]
             );
         }
     },

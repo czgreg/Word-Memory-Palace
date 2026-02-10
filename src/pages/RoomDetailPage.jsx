@@ -12,7 +12,7 @@ const RoomDetailPage = () => {
     const { isReady } = useDatabase();
 
     const [room, setRoom] = useState(null);
-    const [words, setWords] = useState(Array(10).fill({ word: '', phonetic: '', meaning: '' }));
+    const [words, setWords] = useState(Array(10).fill({ word: '', phonetic: '', part_of_speech: '', meaning: '' }));
     const [story, setStory] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -31,7 +31,7 @@ const RoomDetailPage = () => {
             setRoom(roomData);
 
             const wordsData = await wordRepository.getByRoomId(id);
-            const initialWords = Array(10).fill(null).map((_, i) => wordsData[i] || { word: '', phonetic: '', meaning: '' });
+            const initialWords = Array(10).fill(null).map((_, i) => wordsData[i] || { word: '', phonetic: '', part_of_speech: '', meaning: '' });
             setWords(initialWords);
 
             const storyData = await storyRepository.getByRoomId(id);
@@ -72,9 +72,9 @@ const RoomDetailPage = () => {
                 pos = dictData[0].meanings?.[0]?.partOfSpeech || '';
             }
 
-            return { phonetic, meaning: pos ? `[${pos}] ${meaning}` : meaning };
+            return { phonetic, partOf_speech: pos, meaning };
         } catch (err) {
-            return { phonetic: '', meaning: '' };
+            return { phonetic: '', partOf_speech: '', meaning: '' };
         }
     };
 
@@ -85,7 +85,12 @@ const RoomDetailPage = () => {
         setActiveLoadingIdx(index);
         const details = await fetchWordDetails(word);
         const newWords = [...words];
-        newWords[index] = { ...newWords[index], ...details };
+        newWords[index] = {
+            ...newWords[index],
+            phonetic: details.phonetic,
+            part_of_speech: details.partOf_speech,
+            meaning: details.meaning
+        };
         setWords(newWords);
         setActiveLoadingIdx(null);
     };
@@ -136,6 +141,7 @@ const RoomDetailPage = () => {
             updatedWords[i] = {
                 ...updatedWords[i],
                 phonetic: details.phonetic || updatedWords[i].phonetic,
+                part_of_speech: details.partOf_speech || updatedWords[i].part_of_speech,
                 meaning: manualMeaning || details.meaning || updatedWords[i].meaning
             };
         }
@@ -151,7 +157,15 @@ const RoomDetailPage = () => {
             for (let i = 0; i < words.length; i++) {
                 const w = words[i];
                 if (w.word.trim()) {
-                    await wordRepository.upsert(w.id, id, w.word.trim(), w.phonetic.trim(), w.meaning.trim(), i);
+                    await wordRepository.upsert(
+                        w.id,
+                        id,
+                        w.word.trim(),
+                        w.phonetic?.trim() || '',
+                        w.part_of_speech?.trim() || '',
+                        w.meaning.trim(),
+                        i
+                    );
                 } else if (w.id) {
                     await wordRepository.delete(w.id);
                 }
@@ -314,7 +328,7 @@ const RoomDetailPage = () => {
                             {words.map((w, index) => (
                                 <div key={index} style={{
                                     display: 'grid',
-                                    gridTemplateColumns: '30px 1fr 1fr 1.5fr 44px',
+                                    gridTemplateColumns: '30px 1.2fr 1fr 0.8fr 1.5fr 44px',
                                     gap: '0.5rem',
                                     alignItems: 'center',
                                     background: 'var(--glass-bg)',
@@ -337,6 +351,14 @@ const RoomDetailPage = () => {
                                         style={{ padding: '0.5rem' }}
                                         value={w.phonetic}
                                         onChange={(e) => handleWordChange(index, 'phonetic', e.target.value)}
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="词性"
+                                        className="input-field"
+                                        style={{ padding: '0.5rem' }}
+                                        value={w.part_of_speech}
+                                        onChange={(e) => handleWordChange(index, 'part_of_speech', e.target.value)}
                                     />
                                     <input
                                         type="text"

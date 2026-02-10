@@ -1,10 +1,19 @@
 export const migrations = `
-  CREATE TABLE IF NOT EXISTS rooms (
+  CREATE TABLE IF NOT EXISTS houses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     order_index INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    house_id INTEGER,
+    order_index INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    is_completed BOOLEAN DEFAULT 0
+    is_completed BOOLEAN DEFAULT 0,
+    FOREIGN KEY (house_id) REFERENCES houses (id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS words (
@@ -12,6 +21,7 @@ export const migrations = `
     room_id INTEGER NOT NULL,
     word TEXT NOT NULL,
     phonetic TEXT,
+    part_of_speech TEXT,
     meaning TEXT NOT NULL,
     order_index INTEGER DEFAULT 0,
     mastery_level INTEGER DEFAULT 0,

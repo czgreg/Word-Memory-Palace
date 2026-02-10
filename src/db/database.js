@@ -23,10 +23,23 @@ class DatabaseService {
             this.db = new this.SQL.Database(new Uint8Array(savedDb));
         } else {
             this.db = new this.SQL.Database();
-            this.db.run(migrations);
-            await this.saveToIndexedDB();
         }
 
+        // 无论是否是新库,都运行一遍建表语句 (针对新表 houses)
+        this.db.run(migrations);
+
+        // 针对老数据库,手动尝试添加缺少的字段 (SQLite 不支持 ADD COLUMN IF NOT EXISTS)
+        try {
+            this.db.run("ALTER TABLE rooms ADD COLUMN house_id INTEGER REFERENCES houses(id) ON DELETE CASCADE;");
+            console.log("已成功为 rooms 表添加 house_id 字段");
+        } catch (e) { }
+
+        try {
+            this.db.run("ALTER TABLE words ADD COLUMN part_of_speech TEXT;");
+            console.log("已成功为 words 表添加 part_of_speech 字段");
+        } catch (e) { }
+
+        await this.saveToIndexedDB();
         this.db.run("PRAGMA foreign_keys = ON;");
         return this.db;
     }

@@ -1,56 +1,146 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useDatabase } from '../hooks/useDatabase';
+import { houseRepository } from '../db/repositories/houseRepository';
 import { roomRepository } from '../db/repositories/roomRepository';
-import RoomCard from '../components/Room/RoomCard';
+import HouseList from '../components/House/HouseList';
+import RoomList from '../components/Room/RoomList';
+import HouseDialog from '../components/House/HouseDialog';
+import RoomDialog from '../components/Room/RoomDialog';
 
 const RoomsPage = () => {
     const { isReady } = useDatabase();
+    const [houses, setHouses] = useState([]);
     const [rooms, setRooms] = useState([]);
+    const [selectedHouseId, setSelectedHouseId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
 
-    const fetchRooms = async () => {
-        setIsLoading(true);
+    // Dialog states
+    const [isHouseDialogOpen, setIsHouseDialogOpen] = useState(false);
+    const [isRoomDialogOpen, setIsRoomDialogOpen] = useState(false);
+    const [editingHouse, setEditingHouse] = useState(null);
+    const [editingRoom, setEditingRoom] = useState(null);
+
+    const fetchHouses = async () => {
         try {
-            const data = await roomRepository.getAll();
+            const data = await houseRepository.getAll();
+            setHouses(data);
+
+            // 自动选中第一个房子
+            if (data.length > 0 && !selectedHouseId) {
+                setSelectedHouseId(data[0].id);
+            }
+        } catch (err) {
+            console.error("加载房子失败:", err);
+        }
+    };
+
+    const fetchRooms = async (houseId) => {
+        if (!houseId) {
+            setRooms([]);
+            return;
+        }
+
+        try {
+            const data = await roomRepository.getByHouseId(houseId);
             setRooms(data);
         } catch (err) {
             console.error("加载房间失败:", err);
-        } finally {
-            setIsLoading(false);
         }
     };
 
     useEffect(() => {
         if (isReady) {
-            fetchRooms();
+            setIsLoading(true);
+            fetchHouses().finally(() => setIsLoading(false));
         }
     }, [isReady]);
 
-    const filteredRooms = rooms.filter(room =>
-        room.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    useEffect(() => {
+        if (selectedHouseId) {
+            fetchRooms(selectedHouseId);
+        } else {
+            setRooms([]);
+        }
+    }, [selectedHouseId]);
 
-    const exactMatch = rooms.find(room =>
-        room.name.toLowerCase() === searchQuery.toLowerCase().trim()
-    );
+    // House handlers
+    const handleCreateHouse = () => {
+        setEditingHouse(null);
+        setIsHouseDialogOpen(true);
+    };
 
-    const handleCreateRoom = async (e) => {
-        if (e) e.preventDefault();
-        const name = searchQuery.trim();
-        if (!name || exactMatch) return;
+    const handleEditHouse = (house) => {
+        setEditingHouse(house);
+        setIsHouseDialogOpen(true);
+    };
 
-        setIsCreating(true);
+    const handleSaveHouse = async (name) => {
         try {
-            await roomRepository.create(name);
-            setSearchQuery('');
-            fetchRooms();
+            if (editingHouse) {
+                await houseRepository.update(editingHouse.id, name);
+            } else {
+                const newId = await houseRepository.create(name);
+                setSelectedHouseId(newId);
+            }
+            await fetchHouses();
+            setIsHouseDialogOpen(false);
+            setEditingHouse(null);
         } catch (err) {
-            console.error("创建房间失败:", err);
-        } finally {
-            setIsCreating(false);
+            console.error("保存房子失败:", err);
+            alert("保存房子失败,请重试。");
+        }
+    };
+
+    const handleDeleteHouse = async (id) => {
+        const house = houses.find(h => h.id === id);
+        const confirmMsg = house.room_count > 0
+            ? `确定要删除房子"${house.name}"吗？这将同时删除其下的 ${house.room_count} 个房间及所有相关数据!`
+            : `确定要删除房子"${house.name}"吗？`;
+
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            await houseRepository.delete(id);
+            if (selectedHouseId === id) {
+                setSelectedHouseId(null);
+            }
+            await fetchHouses();
+        } catch (err) {
+            console.error("删除房子失败:", err);
+            alert("删除房子失败,请重试。");
+        }
+    };
+
+    // Room handlers
+    const handleCreateRoom = () => {
+        if (!selectedHouseId) {
+            alert("请先选择一个房子");
+            return;
+        }
+        setEditingRoom(null);
+        setIsRoomDialogOpen(true);
+    };
+
+    const handleEditRoom = (room) => {
+        setEditingRoom(room);
+        setIsRoomDialogOpen(true);
+    };
+
+    const handleSaveRoom = async (name) => {
+        try {
+            if (editingRoom) {
+                await roomRepository.update(editingRoom.id, name);
+            } else {
+                await roomRepository.create(name, selectedHouseId);
+            }
+            await fetchRooms(selectedHouseId);
+            await fetchHouses(); // 更新房间计数
+            setIsRoomDialogOpen(false);
+            setEditingRoom(null);
+        } catch (err) {
+            console.error("保存房间失败:", err);
+            alert("保存房间失败,请重试。");
         }
     };
 
@@ -59,16 +149,11 @@ const RoomsPage = () => {
 
         try {
             await roomRepository.delete(id);
-            fetchRooms();
+            await fetchRooms(selectedHouseId);
+            await fetchHouses(); // 更新房间计数
         } catch (err) {
             console.error("删除房间失败:", err);
-        }
-    };
-
-    const handleEditRoom = (room) => {
-        const newName = window.prompt("请输入新的房间名称:", room.name);
-        if (newName && newName.trim() && newName !== room.name) {
-            roomRepository.update(room.id, newName.trim()).then(fetchRooms);
+            alert("删除房间失败,请重试。");
         }
     };
 
@@ -80,93 +165,67 @@ const RoomsPage = () => {
         );
     }
 
+    const selectedHouse = houses.find(h => h.id === selectedHouseId);
+
     return (
         <div className="animate-fade">
             <div style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                marginBottom: '3rem',
+                marginBottom: '2rem',
                 textAlign: 'center'
             }}>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: '900', marginBottom: '0.5rem' }}>房间管理</h1>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>查询现有房间或创建新的记忆空间</p>
-
-                <div className="glass-card" style={{
-                    padding: '0.5rem',
-                    width: '100%',
-                    maxWidth: '600px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    borderRadius: '1.25rem',
-                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-                }}>
-                    <div style={{ paddingLeft: '1rem', color: 'var(--text-muted)' }}>
-                        <Search size={22} />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="搜索房间或输入新房间名..."
-                        className="input-field"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        disabled={isCreating}
-                        style={{
-                            border: 'none',
-                            background: 'transparent',
-                            fontSize: '1.1rem',
-                            boxShadow: 'none',
-                            padding: '0.75rem 0.5rem'
-                        }}
-                    />
-                    {searchQuery.trim() && !exactMatch && (
-                        <button
-                            onClick={handleCreateRoom}
-                            className="btn btn-primary"
-                            disabled={isCreating}
-                            style={{ borderRadius: '1rem', padding: '0.6rem 1.25rem' }}
-                        >
-                            {isCreating ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />}
-                            <span>新建房间</span>
-                        </button>
-                    )}
-                </div>
+                <p style={{ color: 'var(--text-muted)' }}>管理你的房子和房间,组织你的记忆空间</p>
             </div>
 
-            {filteredRooms.length === 0 ? (
-                <div className="glass-card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <div style={{
-                            width: '64px', height: '64px', borderRadius: '50%', background: 'var(--glass-bg)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto'
-                        }}>
-                            <Search size={32} />
-                        </div>
-                    </div>
-                    <h2 style={{ color: 'var(--text)', marginBottom: '0.5rem' }}>
-                        {searchQuery ? `未找到关于 "${searchQuery}" 的房间` : '暂无房间'}
-                    </h2>
-                    <p>{searchQuery ? '尝试换个关键词，或者直接点击上方按钮创建新房间。' : '开始创建你的第一个记忆房间吧！'}</p>
-                </div>
-            ) : (
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                    gap: '1.5rem'
-                }}>
-                    {filteredRooms.map(room => (
-                        <RoomCard
-                            key={room.id}
-                            room={room}
-                            onDelete={handleDeleteRoom}
-                            onEdit={handleEditRoom}
-                        />
-                    ))}
-                </div>
-            )}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '350px 1fr',
+                gap: '1.5rem',
+                alignItems: 'start'
+            }}>
+                <HouseList
+                    houses={houses}
+                    selectedHouseId={selectedHouseId}
+                    onSelectHouse={setSelectedHouseId}
+                    onEditHouse={handleEditHouse}
+                    onDeleteHouse={handleDeleteHouse}
+                    onCreateHouse={handleCreateHouse}
+                />
+
+                <RoomList
+                    rooms={rooms}
+                    houseName={selectedHouse?.name}
+                    onEditRoom={handleEditRoom}
+                    onDeleteRoom={handleDeleteRoom}
+                    onCreateRoom={handleCreateRoom}
+                />
+            </div>
+
+            <HouseDialog
+                isOpen={isHouseDialogOpen}
+                onClose={() => {
+                    setIsHouseDialogOpen(false);
+                    setEditingHouse(null);
+                }}
+                onSave={handleSaveHouse}
+                editingHouse={editingHouse}
+            />
+
+            <RoomDialog
+                isOpen={isRoomDialogOpen}
+                onClose={() => {
+                    setIsRoomDialogOpen(false);
+                    setEditingRoom(null);
+                }}
+                onSave={handleSaveRoom}
+                editingRoom={editingRoom}
+            />
         </div>
     );
 };
 
 export default RoomsPage;
+

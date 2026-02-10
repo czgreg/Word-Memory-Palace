@@ -59,6 +59,33 @@ const LearnPage = () => {
         return map;
     }, [words]);
 
+    // 词性颜色映射：不同词性使用不同的高亮颜色
+    const posColorMap = useMemo(() => ({
+        noun: { color: '#818cf8', bg: 'rgba(129, 140, 248, 0.15)', border: '#818cf8' },  // 蓝紫色 - 名词
+        n: { color: '#818cf8', bg: 'rgba(129, 140, 248, 0.15)', border: '#818cf8' },
+        verb: { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: '#fb923c' },  // 橙色   - 动词
+        v: { color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: '#fb923c' },
+        adjective: { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.15)', border: '#4ade80' },  // 绿色   - 形容词
+        adj: { color: '#4ade80', bg: 'rgba(74, 222, 128, 0.15)', border: '#4ade80' },
+        adverb: { color: '#f472b6', bg: 'rgba(244, 114, 182, 0.15)', border: '#f472b6' },  // 粉色   - 副词
+        adv: { color: '#f472b6', bg: 'rgba(244, 114, 182, 0.15)', border: '#f472b6' },
+        pronoun: { color: '#67e8f9', bg: 'rgba(103, 232, 249, 0.15)', border: '#67e8f9' },  // 青色   - 代词
+        pron: { color: '#67e8f9', bg: 'rgba(103, 232, 249, 0.15)', border: '#67e8f9' },
+        preposition: { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)', border: '#fbbf24' },  // 金色   - 介词
+        prep: { color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)', border: '#fbbf24' },
+        conjunction: { color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.15)', border: '#a78bfa' },  // 淡紫色 - 连词
+        conj: { color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.15)', border: '#a78bfa' },
+        interjection: { color: '#f87171', bg: 'rgba(248, 113, 113, 0.15)', border: '#f87171' },  // 红色   - 感叹词
+        interj: { color: '#f87171', bg: 'rgba(248, 113, 113, 0.15)', border: '#f87171' },
+        default: { color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: '#94a3b8' },  // 灰色   - 未知
+    }), []);
+
+    const getPosStyle = useCallback((pos) => {
+        if (!pos) return posColorMap.default;
+        const key = pos.toLowerCase().trim();
+        return posColorMap[key] || posColorMap.default;
+    }, [posColorMap]);
+
     const renderStory = () => {
         if (!story) return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>暂无故事内容</div>;
 
@@ -83,7 +110,7 @@ const LearnPage = () => {
                 content = line.substring(4);
             }
 
-            // 2. Fragment rendering (Bold + Interactive Words)
+            // 2. Fragment rendering (Bold + Interactive Words with POS-based colors)
             const renderFragments = (text) => {
                 const wordRegexPart = validWords.length > 0
                     ? `|${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}`
@@ -97,24 +124,33 @@ const LearnPage = () => {
                         return <strong key={i} style={{ color: 'var(--warning)' }}>{part.slice(2, -2)}</strong>;
                     }
 
-                    // Check if Word Match
+                    // Check if Word Match — 根据词性使用不同颜色
                     const w = wordMap[part.toLowerCase()];
                     if (w) {
+                        const posStyle = getPosStyle(w.part_of_speech);
                         return (
                             <span
                                 key={i}
                                 onClick={() => speak(part)}
+                                title={w.part_of_speech ? `${w.part_of_speech}: ${w.meaning}` : w.meaning}
                                 style={{
-                                    color: 'var(--text)',
+                                    color: posStyle.color,
                                     fontWeight: 'bold',
-                                    borderBottom: '2px solid var(--primary)',
-                                    background: 'rgba(99, 102, 241, 0.15)',
+                                    borderBottom: `2px solid ${posStyle.border}`,
+                                    background: posStyle.bg,
                                     cursor: 'pointer',
                                     transition: 'all 0.2s ease',
-                                    padding: '0 2px'
+                                    padding: '0 3px',
+                                    borderRadius: '2px'
                                 }}
-                                onMouseOver={(e) => e.target.style.background = 'var(--primary-glow)'}
-                                onMouseOut={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.15)'}
+                                onMouseOver={(e) => {
+                                    e.target.style.background = posStyle.border;
+                                    e.target.style.color = '#fff';
+                                }}
+                                onMouseOut={(e) => {
+                                    e.target.style.background = posStyle.bg;
+                                    e.target.style.color = posStyle.color;
+                                }}
                             >
                                 {part}
                             </span>
@@ -185,6 +221,19 @@ const LearnPage = () => {
                             <h2 style={{ fontSize: '2.5rem', fontWeight: '900', marginBottom: '0.5rem' }}>{currentWord.word}</h2>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '1.25rem' }}>[{currentWord.phonetic}]</span>
+                                {currentWord.part_of_speech && (
+                                    <span style={{
+                                        fontSize: '0.9rem',
+                                        background: 'rgba(99, 102, 241, 0.1)',
+                                        color: 'var(--primary)',
+                                        padding: '0.1rem 0.5rem',
+                                        borderRadius: '0.5rem',
+                                        fontWeight: '600',
+                                        border: '1px solid rgba(99, 102, 241, 0.2)'
+                                    }}>
+                                        {currentWord.part_of_speech}
+                                    </span>
+                                )}
                                 <button
                                     onClick={() => speak(currentWord.word)}
                                     className="btn-secondary"
