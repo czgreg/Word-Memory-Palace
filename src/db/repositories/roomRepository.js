@@ -63,21 +63,22 @@ export const roomRepository = {
             const stats = dbService.query(`
               SELECT 
                 (SELECT COUNT(*) FROM words WHERE word IS NOT NULL AND TRIM(word) != '') as total_words,
+                (SELECT COUNT(*) FROM rooms) as total_rooms,
                 (SELECT COUNT(*) FROM rooms WHERE is_completed = 1) as completed_rooms
             `);
-            return stats[0] || { total_words: 0, completed_rooms: 0 };
+            return stats[0] || { total_words: 0, total_rooms: 0, completed_rooms: 0 };
         } catch (e) {
             console.error("getStats error:", e);
-            // Fallback if is_completed column doesn't exist
             try {
                 const stats = dbService.query(`
                   SELECT 
                     (SELECT COUNT(*) FROM words WHERE word IS NOT NULL AND TRIM(word) != '') as total_words,
+                    (SELECT COUNT(*) FROM rooms) as total_rooms,
                     0 as completed_rooms
                 `);
-                return stats[0] || { total_words: 0, completed_rooms: 0 };
+                return stats[0] || { total_words: 0, total_rooms: 0, completed_rooms: 0 };
             } catch (e2) {
-                return { total_words: 0, completed_rooms: 0 };
+                return { total_words: 0, total_rooms: 0, completed_rooms: 0 };
             }
         }
     }

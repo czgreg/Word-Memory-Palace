@@ -6,8 +6,7 @@ import { Link } from 'react-router-dom';
 
 const HomePage = () => {
     const { isReady } = useDatabase();
-    const [stats, setStats] = useState({ total_words: 0, completed_rooms: 0 });
-    const [streak, setStreak] = useState(0);
+    const [stats, setStats] = useState({ total_words: 0, total_rooms: 0, completed_rooms: 0 });
 
     useEffect(() => {
         if (isReady) {
@@ -45,24 +44,24 @@ const HomePage = () => {
 
                 <div className="glass-card" style={{ padding: '1.5rem', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: '-10px', right: '-10px', opacity: 0.1 }}>
-                        <CheckCircle size={100} />
+                        <Flame size={100} />
                     </div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <CheckCircle size={16} /> 已筑房间
+                        <Flame size={16} /> 已筑房间
                     </div>
-                    <div style={{ fontSize: '2.5rem', fontWeight: '900', margin: '0.5rem 0' }}>{stats.completed_rooms}</div>
-                    <div style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>个已完成学习的房间</div>
+                    <div style={{ fontSize: '2.5rem', fontWeight: '900', margin: '0.5rem 0' }}>{stats.total_rooms}</div>
+                    <div style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>个记忆房间</div>
                 </div>
 
                 <div className="glass-card" style={{ padding: '1.5rem', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: '-10px', right: '-10px', opacity: 0.1 }}>
-                        <Flame size={100} />
+                        <CheckCircle size={100} />
                     </div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Flame size={16} /> 学习热度
+                        <CheckCircle size={16} /> 已完成学习
                     </div>
-                    <div style={{ fontSize: '2.5rem', fontWeight: '900', margin: '0.5rem 0' }}>{streak} 天</div>
-                    <div style={{ color: 'var(--accent)', fontSize: '0.875rem' }}>保持专注，继续努力！</div>
+                    <div style={{ fontSize: '2.5rem', fontWeight: '900', margin: '0.5rem 0' }}>{stats.completed_rooms}</div>
+                    <div style={{ color: 'var(--accent)', fontSize: '0.875rem' }}>个已完成的房间</div>
                 </div>
             </div>
 

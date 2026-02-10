@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import RoomsPage from './pages/RoomsPage';
 import RoomDetailPage from './pages/RoomDetailPage';
 import LearnPage from './pages/LearnPage';
+import SentencePracticePage from './pages/SentencePracticePage';
 import ChallengePage from './pages/ChallengePage';
 import CustomChallengePage from './pages/CustomChallengePage';
 
@@ -17,6 +18,7 @@ function App() {
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/room/:id" element={<RoomDetailPage />} />
           <Route path="/room/:id/learn" element={<LearnPage />} />
+          <Route path="/room/:id/sentence-practice" element={<SentencePracticePage />} />
           <Route path="/room/:id/challenge" element={<ChallengePage />} />
           <Route path="/custom-challenge" element={<CustomChallengePage />} />
         </Routes>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Volume2, ChevronLeft, ChevronRight, Trophy, BookOpen, Loader2 } from 'lucide-react';
+import { ArrowLeft, Volume2, ChevronLeft, ChevronRight, Trophy, BookOpen, Loader2, Sparkles } from 'lucide-react';
 import { useDatabase } from '../hooks/useDatabase';
 import { roomRepository } from '../db/repositories/roomRepository';
 import { wordRepository } from '../db/repositories/wordRepository';
@@ -47,8 +47,7 @@ const LearnPage = () => {
     }, [fetchData]);
 
     const handleFinish = async () => {
-        // Mark room as completed in a real app logic
-        navigate(`/room/${id}/challenge`);
+        navigate(`/room/${id}/sentence-practice`);
     };
 
     const wordMap = useMemo(() => {
@@ -271,8 +270,8 @@ const LearnPage = () => {
                                     className="btn btn-primary"
                                     style={{ width: '100%', marginTop: '2rem', padding: '1rem' }}
                                 >
-                                    <Trophy size={18} />
-                                    <span>学习完成，开始挑战</span>
+                                    <Sparkles size={18} />
+                                    <span>学习完成，开始造句练习</span>
                                 </button>
                             )}
                         </div>
