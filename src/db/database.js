@@ -39,6 +39,16 @@ class DatabaseService {
             console.log("已成功为 words 表添加 part_of_speech 字段");
         } catch (e) { }
 
+        // 清理历史遗留的孤儿数据（之前级联删除失效导致）
+        try {
+            this.db.run(`DELETE FROM words WHERE room_id NOT IN (SELECT id FROM rooms)`);
+            this.db.run(`DELETE FROM stories WHERE room_id NOT IN (SELECT id FROM rooms)`);
+            this.db.run(`DELETE FROM challenges WHERE room_id NOT IN (SELECT id FROM rooms)`);
+            this.db.run(`DELETE FROM rooms WHERE house_id IS NOT NULL AND house_id NOT IN (SELECT id FROM houses)`);
+        } catch (e) {
+            console.warn("孤儿数据清理出错:", e);
+        }
+
         await this.saveToIndexedDB();
         this.db.run("PRAGMA foreign_keys = ON;");
         return this.db;

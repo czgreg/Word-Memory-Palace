@@ -37,7 +37,14 @@ export const houseRepository = {
     },
 
     delete: async (id) => {
-        // 级联删除所有房间和相关数据
+        // sql.js 的 PRAGMA foreign_keys 不可靠，手动级联删除
+        const rooms = dbService.query(`SELECT id FROM rooms WHERE house_id = ?`, [id]);
+        for (const room of rooms) {
+            dbService.db.run(`DELETE FROM words WHERE room_id = ?`, [room.id]);
+            dbService.db.run(`DELETE FROM stories WHERE room_id = ?`, [room.id]);
+            dbService.db.run(`DELETE FROM challenges WHERE room_id = ?`, [room.id]);
+        }
+        dbService.db.run(`DELETE FROM rooms WHERE house_id = ?`, [id]);
         return dbService.run(`DELETE FROM houses WHERE id = ?`, [id]);
     }
 };

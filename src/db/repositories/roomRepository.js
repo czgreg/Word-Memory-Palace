@@ -53,8 +53,10 @@ export const roomRepository = {
     },
 
     delete: async (id) => {
-        // SQLite with FOREIGN KEY constraints enabled will handle cascade delete
-        // We need to ensure PRAGMA foreign_keys = ON; is set on init
+        // sql.js 的 PRAGMA foreign_keys 不可靠，手动级联删除
+        dbService.db.run(`DELETE FROM words WHERE room_id = ?`, [id]);
+        dbService.db.run(`DELETE FROM stories WHERE room_id = ?`, [id]);
+        dbService.db.run(`DELETE FROM challenges WHERE room_id = ?`, [id]);
         return dbService.run(`DELETE FROM rooms WHERE id = ?`, [id]);
     },
 
