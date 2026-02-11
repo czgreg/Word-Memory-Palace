@@ -1,7 +1,7 @@
 import { dbService } from '../database';
 
 export const roomRepository = {
-    getAll: () => {
+    getAll: async () => {
         return dbService.query(`
       SELECT r.*, COUNT(w.id) as word_count 
       FROM rooms r 
@@ -11,7 +11,7 @@ export const roomRepository = {
     `);
     },
 
-    getByHouseId: (houseId) => {
+    getByHouseId: async (houseId) => {
         return dbService.query(`
       SELECT r.*, COUNT(w.id) as word_count 
       FROM rooms r 
@@ -22,13 +22,13 @@ export const roomRepository = {
     `, [houseId]);
     },
 
-    getById: (id) => {
-        const results = dbService.query(`SELECT * FROM rooms WHERE id = ?`, [id]);
+    getById: async (id) => {
+        const results = await dbService.query(`SELECT * FROM rooms WHERE id = ?`, [id]);
         return results.length > 0 ? results[0] : null;
     },
 
     create: async (name, houseId = null) => {
-        const lastRoom = dbService.query(
+        const lastRoom = await dbService.query(
             houseId
                 ? `SELECT MAX(order_index) as max_idx FROM rooms WHERE house_id = ?`
                 : `SELECT MAX(order_index) as max_idx FROM rooms`,
@@ -36,13 +36,12 @@ export const roomRepository = {
         );
         const nextIdx = (lastRoom[0]?.max_idx || 0) + 1;
 
-        await dbService.run(
+        const result = await dbService.run(
             `INSERT INTO rooms (name, house_id, order_index) VALUES (?, ?, ?)`,
             [name, houseId, nextIdx]
         );
 
-        const res = dbService.query(`SELECT last_insert_rowid() as id`);
-        return res[0].id;
+        return result.lastInsertRowid;
     },
 
     update: async (id, name) => {
@@ -53,16 +52,17 @@ export const roomRepository = {
     },
 
     delete: async (id) => {
-        // sql.js 的 PRAGMA foreign_keys 不可靠，手动级联删除
-        dbService.db.run(`DELETE FROM words WHERE room_id = ?`, [id]);
-        dbService.db.run(`DELETE FROM stories WHERE room_id = ?`, [id]);
-        dbService.db.run(`DELETE FROM challenges WHERE room_id = ?`, [id]);
-        return dbService.run(`DELETE FROM rooms WHERE id = ?`, [id]);
+        return dbService.runBatch([
+            { sql: `DELETE FROM words WHERE room_id = ?`, params: [id] },
+            { sql: `DELETE FROM stories WHERE room_id = ?`, params: [id] },
+            { sql: `DELETE FROM challenges WHERE room_id = ?`, params: [id] },
+            { sql: `DELETE FROM rooms WHERE id = ?`, params: [id] },
+        ]);
     },
 
-    getStats: () => {
+    getStats: async () => {
         try {
-            const stats = dbService.query(`
+            const stats = await dbService.query(`
               SELECT 
                 (SELECT COUNT(*) FROM words WHERE word IS NOT NULL AND TRIM(word) != '') as total_words,
                 (SELECT COUNT(*) FROM rooms) as total_rooms,
@@ -71,17 +71,7 @@ export const roomRepository = {
             return stats[0] || { total_words: 0, total_rooms: 0, completed_rooms: 0 };
         } catch (e) {
             console.error("getStats error:", e);
-            try {
-                const stats = dbService.query(`
-                  SELECT 
-                    (SELECT COUNT(*) FROM words WHERE word IS NOT NULL AND TRIM(word) != '') as total_words,
-                    (SELECT COUNT(*) FROM rooms) as total_rooms,
-                    0 as completed_rooms
-                `);
-                return stats[0] || { total_words: 0, total_rooms: 0, completed_rooms: 0 };
-            } catch (e2) {
-                return { total_words: 0, total_rooms: 0, completed_rooms: 0 };
-            }
+            return { total_words: 0, total_rooms: 0, completed_rooms: 0 };
         }
     }
 };

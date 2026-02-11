@@ -10,8 +10,7 @@ const HomePage = () => {
 
     useEffect(() => {
         if (isReady) {
-            const data = roomRepository.getStats();
-            setStats(data);
+            roomRepository.getStats().then(data => setStats(data));
         }
     }, [isReady]);
 

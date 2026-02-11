@@ -11,7 +11,7 @@ export const useDatabase = () => {
                 await dbService.init();
                 setIsReady(true);
             } catch (err) {
-                console.error("数据库初始化失败:", err);
+                console.error("数据库连接失败:", err);
                 setError(err);
             }
         };

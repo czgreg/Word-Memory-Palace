@@ -1,7 +1,7 @@
 import { dbService } from '../database';
 
 export const wordRepository = {
-    getByRoomId: (roomId) => {
+    getByRoomId: async (roomId) => {
         return dbService.query(
             `SELECT * FROM words WHERE room_id = ? ORDER BY order_index ASC`,
             [roomId]

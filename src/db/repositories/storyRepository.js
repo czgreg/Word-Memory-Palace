@@ -1,13 +1,13 @@
 import { dbService } from '../database';
 
 export const storyRepository = {
-    getByRoomId: (roomId) => {
-        const results = dbService.query(`SELECT * FROM stories WHERE room_id = ?`, [roomId]);
+    getByRoomId: async (roomId) => {
+        const results = await dbService.query(`SELECT * FROM stories WHERE room_id = ?`, [roomId]);
         return results.length > 0 ? results[0] : null;
     },
 
     upsert: async (roomId, content) => {
-        const existing = dbService.query(`SELECT id FROM stories WHERE room_id = ?`, [roomId]);
+        const existing = await dbService.query(`SELECT id FROM stories WHERE room_id = ?`, [roomId]);
 
         if (existing.length > 0) {
             return dbService.run(

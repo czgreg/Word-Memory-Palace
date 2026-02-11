@@ -28,9 +28,12 @@ const CustomChallengePage = () => {
 
     useEffect(() => {
         if (isReady) {
-            const data = roomRepository.getAll();
-            setRooms(data);
-            setIsLoading(false);
+            const fetchRooms = async () => {
+                const data = await roomRepository.getAll();
+                setRooms(data);
+                setIsLoading(false);
+            };
+            fetchRooms();
         }
     }, [isReady]);
 

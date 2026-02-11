@@ -11,6 +11,9 @@ dist
 dist-ssr
 build
 
+# Database
+data/
+
 # Misc
 .DS_Store
 .env
