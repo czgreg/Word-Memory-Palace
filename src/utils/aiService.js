@@ -116,12 +116,20 @@ export const aiService = {
      * @returns {Array} [{word, part_of_speech, meaning}, ...]
      */
     async batchLookupWords(words, onProgress) {
-        // 分批处理，每批最多 30 个词以确保 AI 输出质量
-        const batchSize = 30;
+        // 每批50词，同时并发3个批次
+        const batchSize = 50;
+        const concurrency = 3;
         const allResults = [];
+        let completed = 0;
 
+        // 将所有批次准备好
+        const batches = [];
         for (let i = 0; i < words.length; i += batchSize) {
-            const batch = words.slice(i, i + batchSize);
+            batches.push(words.slice(i, i + batchSize));
+        }
+
+        // 处理单个批次的函数
+        const processBatch = async (batch) => {
             const wordList = batch.join('\n');
             const messages = [
                 {
@@ -130,14 +138,14 @@ export const aiService = {
 
 请严格以 JSON 数组格式返回，不要包含任何其他文字：
 [
-  {"word": "abandon", "part_of_speech": "v.", "meaning": "放弃；抛弃"},
+  {"word": "abandon", "part_of_speech": "v.", "meaning": "放弃"},
   ...
 ]
 
 规则：
 - 每个单词只给出最常见/最核心的一个词性
 - 词性格式：n. v. adj. adv. prep. conj. pron. det. interj. 等
-- 中文释义简短精炼，不超过10个字，多个义项用分号分隔（最多3个）
+- 中文释义只给最常用的一个意思，不超过6个字，不要用分号分隔多个义项
 - 不要遗漏任何单词`
                 },
                 {
@@ -149,9 +157,18 @@ export const aiService = {
             const response = await this.chat(messages);
             const jsonMatch = response.match(/\[[\s\S]*\]/);
             if (!jsonMatch) throw new Error('AI 返回格式错误，无法解析词义结果');
-            const batchResults = JSON.parse(jsonMatch[0]);
-            allResults.push(...batchResults);
-            if (onProgress) onProgress(Math.min(i + batchSize, words.length), words.length);
+            return JSON.parse(jsonMatch[0]);
+        };
+
+        // 并发执行批次
+        for (let i = 0; i < batches.length; i += concurrency) {
+            const group = batches.slice(i, i + concurrency);
+            const results = await Promise.all(group.map(batch => processBatch(batch)));
+            for (const batchResults of results) {
+                allResults.push(...batchResults);
+            }
+            completed += group.reduce((sum, b) => sum + b.length, 0);
+            if (onProgress) onProgress(Math.min(completed, words.length), words.length);
         }
 
         return allResults;

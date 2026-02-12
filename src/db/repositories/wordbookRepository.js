@@ -118,13 +118,19 @@ export const wordbookRepository = {
             params: [wordbookId, e.word, e.part_of_speech, e.meaning]
         }));
 
-        // 更新总词数
-        statements.push({
-            sql: `UPDATE wordbooks SET total_words = (SELECT COUNT(*) FROM wordbook_entries WHERE wordbook_id = ?) WHERE id = ?`,
-            params: [wordbookId, wordbookId]
-        });
+        // 分片批量执行，每500条一批，避免单次请求过大
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+            const chunk = statements.slice(i, i + CHUNK_SIZE);
+            await dbService.runBatch(chunk);
+        }
 
-        await dbService.runBatch(statements);
+        // 更新总词数
+        await dbService.run(
+            `UPDATE wordbooks SET total_words = (SELECT COUNT(*) FROM wordbook_entries WHERE wordbook_id = ?) WHERE id = ?`,
+            [wordbookId, wordbookId]
+        );
+
         return entries.length;
     },
 
