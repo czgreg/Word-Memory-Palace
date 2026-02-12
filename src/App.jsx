@@ -8,6 +8,9 @@ import LearnPage from './pages/LearnPage';
 import SentencePracticePage from './pages/SentencePracticePage';
 import ChallengePage from './pages/ChallengePage';
 import CustomChallengePage from './pages/CustomChallengePage';
+import WordbookPage from './pages/WordbookPage';
+import FlashReviewPage from './pages/FlashReviewPage';
+import PalaceBuildPage from './pages/PalaceBuildPage';
 
 function App() {
   return (
@@ -21,6 +24,9 @@ function App() {
           <Route path="/room/:id/sentence-practice" element={<SentencePracticePage />} />
           <Route path="/room/:id/challenge" element={<ChallengePage />} />
           <Route path="/custom-challenge" element={<CustomChallengePage />} />
+          <Route path="/wordbooks" element={<WordbookPage />} />
+          <Route path="/wordbook/:id/review" element={<FlashReviewPage />} />
+          <Route path="/wordbook/:id/build-palace" element={<PalaceBuildPage />} />
         </Routes>
       </Layout>
     </Router>
@@ -28,3 +34,4 @@ function App() {
 }
 
 export default App;
+

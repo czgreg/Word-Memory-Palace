@@ -17,7 +17,7 @@ const DB_PATH = path.join(DATA_DIR, 'memory-palace.db');
 
 // 确保 data 目录存在
 if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 // 初始化数据库
@@ -91,6 +91,26 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (word_id) REFERENCES words (id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS wordbooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    total_words INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS wordbook_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wordbook_id INTEGER NOT NULL,
+    word TEXT NOT NULL,
+    part_of_speech TEXT,
+    meaning TEXT NOT NULL,
+    is_known INTEGER DEFAULT -1,
+    review_round INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (wordbook_id) REFERENCES wordbooks (id) ON DELETE CASCADE
+  );
 `);
 
 console.log(`✅ 数据库已初始化: ${DB_PATH}`);
@@ -101,64 +121,64 @@ app.use(express.json());
 
 // 健康检查
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', dbPath: DB_PATH });
+  res.json({ status: 'ok', dbPath: DB_PATH });
 });
 
 // 查询 API — 返回行数组
 app.post('/api/db/query', (req, res) => {
-    try {
-        const { sql, params = [] } = req.body;
-        const stmt = db.prepare(sql);
-        const rows = stmt.all(...params);
-        res.json({ rows });
-    } catch (err) {
-        console.error('查询失败:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const { sql, params = [] } = req.body;
+    const stmt = db.prepare(sql);
+    const rows = stmt.all(...params);
+    res.json({ rows });
+  } catch (err) {
+    console.error('查询失败:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 执行 API — 返回 changes 和 lastInsertRowid
 app.post('/api/db/run', (req, res) => {
-    try {
-        const { sql, params = [] } = req.body;
-        const stmt = db.prepare(sql);
-        const result = stmt.run(...params);
-        res.json({
-            changes: result.changes,
-            lastInsertRowid: Number(result.lastInsertRowid)
-        });
-    } catch (err) {
-        console.error('执行失败:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const { sql, params = [] } = req.body;
+    const stmt = db.prepare(sql);
+    const result = stmt.run(...params);
+    res.json({
+      changes: result.changes,
+      lastInsertRowid: Number(result.lastInsertRowid)
+    });
+  } catch (err) {
+    console.error('执行失败:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 批量执行 API — 在事务中执行多条语句
 app.post('/api/db/batch', (req, res) => {
-    try {
-        const { statements } = req.body;
-        const results = [];
+  try {
+    const { statements } = req.body;
+    const results = [];
 
-        const transaction = db.transaction(() => {
-            for (const { sql, params = [] } of statements) {
-                const stmt = db.prepare(sql);
-                const result = stmt.run(...params);
-                results.push({
-                    changes: result.changes,
-                    lastInsertRowid: Number(result.lastInsertRowid)
-                });
-            }
+    const transaction = db.transaction(() => {
+      for (const { sql, params = [] } of statements) {
+        const stmt = db.prepare(sql);
+        const result = stmt.run(...params);
+        results.push({
+          changes: result.changes,
+          lastInsertRowid: Number(result.lastInsertRowid)
         });
+      }
+    });
 
-        transaction();
-        res.json({ results });
-    } catch (err) {
-        console.error('批量执行失败:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+    transaction();
+    res.json({ results });
+  } catch (err) {
+    console.error('批量执行失败:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 后端服务运行中: http://localhost:${PORT}`);
-    console.log(`📁 数据库路径: ${DB_PATH}`);
+  console.log(`🚀 后端服务运行中: http://localhost:${PORT}`);
+  console.log(`📁 数据库路径: ${DB_PATH}`);
 });

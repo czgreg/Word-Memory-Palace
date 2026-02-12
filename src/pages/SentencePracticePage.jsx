@@ -10,151 +10,6 @@ import { useSpeech } from '../hooks/useSpeech';
 
 const REQUIRED_SENTENCES = 3;
 
-// ========== AI 配置面板 ==========
-const AIConfigPanel = ({ config, onSave, collapsed, onToggle }) => {
-    const [form, setForm] = useState(config);
-    const [ollamaOk, setOllamaOk] = useState(null);
-
-    useEffect(() => {
-        aiService.checkOllamaAvailable().then(setOllamaOk);
-    }, []);
-
-    const handleSave = () => {
-        onSave(form);
-        onToggle();
-    };
-
-    return (
-        <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-            <div
-                onClick={onToggle}
-                style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '1rem 1.5rem', cursor: 'pointer'
-                }}
-            >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Settings size={18} />
-                    <span style={{ fontWeight: '600' }}>AI 设置</span>
-                    <span style={{
-                        fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '1rem',
-                        background: aiService.isConfigured() ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: aiService.isConfigured() ? 'var(--success)' : 'var(--danger)'
-                    }}>
-                        {aiService.isConfigured() ? '已配置' : '未配置'}
-                    </span>
-                </div>
-                {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-            </div>
-
-            {!collapsed && (
-                <div style={{ padding: '0 1.5rem 1.5rem' }}>
-                    {/* Mode Switch */}
-                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                        {[
-                            { id: 'local', label: '本地模型 (Ollama)', status: ollamaOk },
-                            { id: 'remote', label: '远程 API' }
-                        ].map(m => (
-                            <button
-                                key={m.id}
-                                className={form.mode === m.id ? 'btn btn-primary' : 'btn btn-secondary'}
-                                style={{ flex: 1, padding: '0.75rem' }}
-                                onClick={() => setForm(f => ({ ...f, mode: m.id }))}
-                            >
-                                {m.label}
-                                {m.id === 'local' && ollamaOk !== null && (
-                                    <span style={{
-                                        fontSize: '0.7rem', marginLeft: '0.5rem',
-                                        color: ollamaOk ? 'var(--success)' : 'var(--danger)'
-                                    }}>
-                                        {ollamaOk ? '● 在线' : '● 离线'}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-
-                    {form.mode === 'local' ? (
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>模型名称</label>
-                            <input
-                                className="input-field"
-                                value={form.localModel}
-                                onChange={e => setForm(f => ({ ...f, localModel: e.target.value }))}
-                                placeholder="例如 qwen3-4b"
-                                style={{ width: '100%', marginBottom: '1rem' }}
-                            />
-                            {!ollamaOk && (
-                                <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginBottom: '1rem' }}>
-                                    ⚠️ Ollama 未运行。请先安装并启动：<code>brew install ollama && ollama serve</code>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {/* 预设快速选择 */}
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>快速选择</label>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                    {[
-                                        { label: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini' },
-                                        { label: '通义千问', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
-                                        { label: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' },
-                                    ].map(preset => (
-                                        <button
-                                            key={preset.label}
-                                            className="btn btn-secondary"
-                                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                                            onClick={() => setForm(f => ({ ...f, remoteUrl: preset.url, remoteModel: preset.model }))}
-                                        >
-                                            {preset.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>API 地址</label>
-                                <input
-                                    className="input-field"
-                                    value={form.remoteUrl}
-                                    onChange={e => setForm(f => ({ ...f, remoteUrl: e.target.value }))}
-                                    placeholder="https://api.openai.com/v1/chat/completions"
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>API Key</label>
-                                <input
-                                    type="password"
-                                    className="input-field"
-                                    value={form.remoteKey}
-                                    onChange={e => setForm(f => ({ ...f, remoteKey: e.target.value }))}
-                                    placeholder="sk-..."
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>模型名称</label>
-                                <input
-                                    className="input-field"
-                                    value={form.remoteModel}
-                                    onChange={e => setForm(f => ({ ...f, remoteModel: e.target.value }))}
-                                    placeholder="gpt-4o-mini"
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '1rem', padding: '0.75rem' }} onClick={handleSave}>
-                        保存配置
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
 // ========== 单个造句输入卡片 ==========
 const SentenceCard = ({ index, word, meaning, partOfSpeech, sentence, review, isReviewing, onSentenceChange, onReview }) => (
     <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
@@ -237,9 +92,6 @@ const SentencePracticePage = () => {
     // 每个单词对应3个句子 和 3个点评
     // sentenceData: { [wordIdx]: { sentences: [str, str, str], reviews: [str|null, ...], reviewing: [bool, ...] } }
     const [sentenceData, setSentenceData] = useState({});
-
-    const [configCollapsed, setConfigCollapsed] = useState(true);
-    const [aiConfig, setAiConfig] = useState(aiService.getConfig());
     const [gameState, setGameState] = useState('practice'); // 'practice' | 'complete'
 
     // Load data
@@ -300,7 +152,7 @@ const SentencePracticePage = () => {
 
     const handleReview = async (sentIdx) => {
         if (!aiService.isConfigured()) {
-            setConfigCollapsed(false);
+            alert('请先点击顶栏 ⚙️ 按钮配置 AI API');
             return;
         }
 
@@ -370,11 +222,6 @@ const SentencePracticePage = () => {
 
     const handlePrev = () => {
         setCurrentWordIdx(i => Math.max(0, i - 1));
-    };
-
-    const handleSaveConfig = (cfg) => {
-        aiService.saveConfig(cfg);
-        setAiConfig(cfg);
     };
 
     // ===== Render =====
@@ -460,13 +307,20 @@ const SentencePracticePage = () => {
                 </div>
             </div>
 
-            {/* AI Config */}
-            <AIConfigPanel
-                config={aiConfig}
-                onSave={handleSaveConfig}
-                collapsed={configCollapsed}
-                onToggle={() => setConfigCollapsed(c => !c)}
-            />
+            {/* AI Config Hint */}
+            {!aiService.isConfigured() && (
+                <div className="glass-card" style={{
+                    padding: '1rem 1.5rem', marginBottom: '1.5rem',
+                    background: 'rgba(239, 68, 68, 0.05)',
+                    border: '1px solid rgba(239, 68, 68, 0.15)',
+                    display: 'flex', alignItems: 'center', gap: '0.75rem'
+                }}>
+                    <AlertTriangle size={18} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.9rem' }}>
+                        AI 未配置，请点击顶部导航栏的 <Settings size={14} style={{ verticalAlign: 'middle' }} /> 按钮进行设置
+                    </span>
+                </div>
+            )}
 
             {/* Main Content */}
             <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.5rem', alignItems: 'start' }}>

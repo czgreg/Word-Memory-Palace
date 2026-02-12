@@ -77,7 +77,7 @@ export const aiService = {
                 model: cfg.remoteModel,
                 messages,
                 temperature: 0.7,
-                max_tokens: 500,
+                max_tokens: 2000,
             }),
         });
         if (!res.ok) {
@@ -103,6 +103,137 @@ export const aiService = {
             {
                 role: 'user',
                 content: `单词：${word}${posInfo}\n释义：${meaning}\n\n我的造句：${sentence}`
+            }
+        ];
+
+        return this.chat(messages);
+    },
+
+    /**
+     * AI 批量查询单词的词性和词义
+     * @param {Array} words - 纯英文单词列表 ["abandon", "ability", ...]
+     * @param {Function} onProgress - 可选进度回调 (completed, total) => void
+     * @returns {Array} [{word, part_of_speech, meaning}, ...]
+     */
+    async batchLookupWords(words, onProgress) {
+        // 分批处理，每批最多 30 个词以确保 AI 输出质量
+        const batchSize = 30;
+        const allResults = [];
+
+        for (let i = 0; i < words.length; i += batchSize) {
+            const batch = words.slice(i, i + batchSize);
+            const wordList = batch.join('\n');
+            const messages = [
+                {
+                    role: 'system',
+                    content: `你是一个英语词典助手。用户会给你一批英语单词，请为每个单词返回其最常见的一个词性和中文释义。
+
+请严格以 JSON 数组格式返回，不要包含任何其他文字：
+[
+  {"word": "abandon", "part_of_speech": "v.", "meaning": "放弃；抛弃"},
+  ...
+]
+
+规则：
+- 每个单词只给出最常见/最核心的一个词性
+- 词性格式：n. v. adj. adv. prep. conj. pron. det. interj. 等
+- 中文释义简短精炼，不超过10个字，多个义项用分号分隔（最多3个）
+- 不要遗漏任何单词`
+                },
+                {
+                    role: 'user',
+                    content: `请为以下 ${batch.length} 个单词查询词性和释义：\n\n${wordList}`
+                }
+            ];
+
+            const response = await this.chat(messages);
+            const jsonMatch = response.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) throw new Error('AI 返回格式错误，无法解析词义结果');
+            const batchResults = JSON.parse(jsonMatch[0]);
+            allResults.push(...batchResults);
+            if (onProgress) onProgress(Math.min(i + batchSize, words.length), words.length);
+        }
+
+        return allResults;
+    },
+
+    /**
+     * AI 语义分组 + 房间命名
+     * @param {Array} words - [{word, part_of_speech, meaning}, ...]
+     * @returns {Array} [{roomName: "动力机房", words: [{word, part_of_speech, meaning}, ...]}, ...]
+     */
+    async groupWordsBySemantic(words) {
+        const wordList = words.map(w => `${w.word} (${w.part_of_speech || '?'}) - ${w.meaning}`).join('\n');
+        const messages = [
+            {
+                role: 'system',
+                content: `你是一位记忆宫殿大师。用户会给你一批英语单词（含词性和中文释义），请你：
+
+1. 按语义相似度或逻辑联系将它们分组，每组 8-12 个词
+2. 为每组起一个充满画面感的房间名字（例如：动力机房、魔法厨房、失重走廊、星空图书馆、熔岩锻造间等）
+
+请严格以 JSON 格式返回，不要包含任何其他文字：
+[
+  {
+    "roomName": "房间名",
+    "words": [
+      {"word": "xxx", "part_of_speech": "v.", "meaning": "xxx"},
+      ...
+    ]
+  },
+  ...
+]
+
+注意：
+- 每个单词只能出现在一个组中，不能遗漏任何单词
+- 房间名要有强烈的画面感和想象力
+- 分组要有逻辑性，同组的词在语义或使用场景上有关联`
+            },
+            {
+                role: 'user',
+                content: `请对以下 ${words.length} 个单词进行分组和命名：\n\n${wordList}`
+            }
+        ];
+
+        const response = await this.chat(messages);
+        // 提取 JSON
+        const jsonMatch = response.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) throw new Error('AI 返回格式错误，无法解析分组结果');
+        return JSON.parse(jsonMatch[0]);
+    },
+
+    /**
+     * 为单个房间生成线性逻辑故事
+     * @param {string} roomName - 房间名
+     * @param {Array} words - [{word, part_of_speech, meaning}, ...]
+     * @returns {string} 故事内容（Markdown 格式，单词用 **word** 加粗）
+     */
+    async generateRoomStory(roomName, words) {
+        const wordList = words.map(w => `${w.word} (${w.part_of_speech || '?'}) - ${w.meaning}`).join('\n');
+        const messages = [
+            {
+                role: 'system',
+                content: `你是一位记忆宫殿故事编写大师，擅长用怪异但流畅的情节帮助记忆单词。
+
+请根据给定的房间名和单词列表，编写一个线性逻辑故事。
+
+故事路径规则：
+- 故事以"我推开门走进【${roomName}】"开头
+- 然后按照空间顺序描述：看到左边发生了 A → 中间发生了 B → 右边发生了 C → ...
+- 每个动作或物体必须对应一个单词
+- 单词在故事中用 **单词** 格式加粗标记（例如 **abandon**）
+- 每个加粗单词后面紧跟用括号标注中文释义，例如 **abandon**（放弃）
+
+故事要求：
+- 情节越怪异越好，如超现实、荒诞、古怪的场景
+- 逻辑不要求正确，但叙事流程一定要流畅自然
+- 每个单词的使用场景要和它的含义有联系，便于关联记忆
+- 故事总长控制在 200-400 字之间
+- 用中文编写故事`
+            },
+            {
+                role: 'user',
+                content: `房间名：${roomName}\n\n单词列表：\n${wordList}\n\n请为这个房间编写记忆故事。`
             }
         ];
 

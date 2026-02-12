@@ -63,4 +63,24 @@ export const migrations = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (word_id) REFERENCES words (id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS wordbooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    total_words INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS wordbook_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wordbook_id INTEGER NOT NULL,
+    word TEXT NOT NULL,
+    part_of_speech TEXT,
+    meaning TEXT NOT NULL,
+    is_known INTEGER DEFAULT -1,
+    review_round INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (wordbook_id) REFERENCES wordbooks (id) ON DELETE CASCADE
+  );
 `;

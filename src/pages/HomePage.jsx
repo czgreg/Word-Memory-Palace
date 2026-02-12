@@ -40,7 +40,7 @@ const HomePage = () => {
     };
 
     return (
-        <div className="animate-fade">
+        <div>
             <div style={{ padding: '2rem 0' }}>
                 <h1 style={{ fontSize: '3rem', marginBottom: '1rem', fontWeight: '900', letterSpacing: '-0.025em' }}>
                     构建你的 <span style={{
