@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Trophy, Loader2, Send, Settings, CheckCircle2, AlertTriangle, XCircle, BookOpen, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useDatabase } from '../hooks/useDatabase';
 import { wordRepository } from '../db/repositories/wordRepository';
+import { sentenceHistoryRepository } from '../db/repositories/sentenceHistoryRepository';
 import { roomRepository } from '../db/repositories/roomRepository';
 import { aiService } from '../utils/aiService';
 import { useSpeech } from '../hooks/useSpeech';
@@ -323,6 +324,18 @@ const SentencePracticePage = () => {
                 currentWord.part_of_speech,
                 sentence
             );
+
+            // 持久化造句记录到数据库
+            try {
+                await sentenceHistoryRepository.save(
+                    currentWord.id,
+                    currentWord.word,
+                    sentence,
+                    review
+                );
+            } catch (saveErr) {
+                console.error('保存造句记录失败:', saveErr);
+            }
 
             setSentenceData(prev => {
                 const copy = { ...prev };

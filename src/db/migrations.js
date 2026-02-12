@@ -53,4 +53,14 @@ export const migrations = `
     rooms_completed INTEGER DEFAULT 0,
     last_study_date DATE
   );
+
+  CREATE TABLE IF NOT EXISTS sentence_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    word_id INTEGER NOT NULL,
+    word TEXT NOT NULL,
+    sentence TEXT NOT NULL,
+    review TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (word_id) REFERENCES words (id) ON DELETE CASCADE
+  );
 `;
