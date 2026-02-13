@@ -215,6 +215,25 @@ function PalaceBuildPage() {
                 </div>
             )}
 
+            {/* Grouping Progress */}
+            {step === 'grouping' && loading && (
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', marginBottom: '2rem' }}>
+                    <Loader2 size={36} className="spin" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
+                    <p style={{ fontWeight: '600', marginBottom: '0.75rem' }}>AI 正在分析 {unknownWords.length} 个单词的语义关系…</p>
+                    <div style={{
+                        width: '100%', maxWidth: '400px', margin: '0 auto',
+                        height: '6px', borderRadius: '3px',
+                        background: 'rgba(255,255,255,0.08)', overflow: 'hidden'
+                    }}>
+                        <div className="progress-indeterminate" style={{
+                            height: '100%', borderRadius: '3px',
+                            background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
+                        }} />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.5rem' }}>通常需要 5-15 秒</p>
+                </div>
+            )}
+
             {/* Step: Grouping Results */}
             {(step === 'grouping' || step === 'stories' || step === 'done') && groups.length > 0 && (
                 <div style={{ display: 'grid', gap: '1rem', marginBottom: '2rem' }}>
@@ -307,10 +326,28 @@ function PalaceBuildPage() {
                 </div>
             )}
 
+            {/* Story Generation Progress */}
             {step === 'stories' && loading && (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                    <Loader2 size={32} className="spin" style={{ marginBottom: '1rem' }} />
-                    <p>正在为第 {currentStoryIdx + 1}/{groups.length} 个房间编写故事...</p>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', marginBottom: '2rem' }}>
+                    <Loader2 size={36} className="spin" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
+                    <p style={{ fontWeight: '600', marginBottom: '0.75rem' }}>
+                        正在为第 {currentStoryIdx + 1}/{groups.length} 个房间编写故事…
+                    </p>
+                    <div style={{
+                        width: '100%', maxWidth: '400px', margin: '0 auto',
+                        height: '8px', borderRadius: '4px',
+                        background: 'rgba(255,255,255,0.08)', overflow: 'hidden'
+                    }}>
+                        <div style={{
+                            width: `${Math.round(((currentStoryIdx + 1) / groups.length) * 100)}%`,
+                            height: '100%', borderRadius: '4px',
+                            background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
+                            transition: 'width 0.5s ease'
+                        }} />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                        {Math.round(((currentStoryIdx + 1) / groups.length) * 100)}% · 房间「{groups[currentStoryIdx]?.roomName}」
+                    </p>
                 </div>
             )}
 
@@ -341,6 +378,14 @@ function PalaceBuildPage() {
             <style>{`
                 .spin { animation: spin 1s linear infinite; }
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                .progress-indeterminate {
+                    width: 40%;
+                    animation: indeterminate 1.5s ease-in-out infinite;
+                }
+                @keyframes indeterminate {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(350%); }
+                }
             `}</style>
         </div>
     );

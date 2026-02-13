@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDatabase } from '../hooks/useDatabase';
 import { wordbookRepository } from '../db/repositories/wordbookRepository';
 import { aiService } from '../utils/aiService';
-import { BookOpen, Plus, Trash2, Zap, FileText, Upload, X, Wand2, Loader2, Sparkles } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Zap, FileText, Upload, X, Wand2, Loader2, Sparkles, Merge, Check } from 'lucide-react';
 
 function WordbookPage() {
     const { isReady } = useDatabase();
@@ -19,6 +19,12 @@ function WordbookPage() {
     const [pageLoading, setPageLoading] = useState(true);
     const [optimizing, setOptimizing] = useState(null); // wordbookId being optimized
     const [progress, setProgress] = useState({ completed: 0, total: 0 }); // AI progress
+    const [mergeMode, setMergeMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [showMergeModal, setShowMergeModal] = useState(false);
+    const [mergeName, setMergeName] = useState('');
+    const [mergeDesc, setMergeDesc] = useState('');
+    const [merging, setMerging] = useState(false);
 
     useEffect(() => {
         if (isReady) loadWordbooks();
@@ -176,8 +182,37 @@ function WordbookPage() {
         }
     };
 
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleMerge = async () => {
+        if (!mergeName.trim()) return;
+        setMerging(true);
+        try {
+            const ids = Array.from(selectedIds);
+            const result = await wordbookRepository.mergeWordbooks(mergeName.trim(), mergeDesc.trim(), ids);
+            setShowMergeModal(false);
+            setMergeMode(false);
+            setSelectedIds(new Set());
+            setMergeName('');
+            setMergeDesc('');
+            await loadWordbooks();
+            alert(`✅ 合并完成！新单词本共 ${result.count} 个词条（已去重）`);
+        } catch (err) {
+            alert('合并失败: ' + err.message);
+        } finally {
+            setMerging(false);
+        }
+    };
+
     return (
-        <div style={{ minHeight: '60vh' }}>
+        <div style={{ minHeight: '60vh', paddingBottom: mergeMode ? '5rem' : 0 }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
@@ -186,9 +221,19 @@ function WordbookPage() {
                     </h1>
                     <p style={{ color: 'var(--text-muted)' }}>管理你的单词列表，快刷标记认识与不认识</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                    <Plus size={18} /> 新建单词本
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {wordbooks.length >= 2 && (
+                        <button
+                            className={`btn ${mergeMode ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => { setMergeMode(!mergeMode); setSelectedIds(new Set()); }}
+                        >
+                            <Merge size={18} /> {mergeMode ? '取消合并' : '合并'}
+                        </button>
+                    )}
+                    <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+                        <Plus size={18} /> 新建单词本
+                    </button>
+                </div>
             </div>
 
             {/* Wordbook List */}
@@ -210,9 +255,33 @@ function WordbookPage() {
                         const reviewProgress = total > 0 ? ((total - unreviewed) / total * 100) : 0;
                         const isOptimizing = optimizing === wb.id;
 
+                        const isSelected = selectedIds.has(wb.id);
+
                         return (
-                            <div key={wb.id} className="glass-card" style={{ padding: '1.5rem' }}>
+                            <div
+                                key={wb.id}
+                                className="glass-card"
+                                style={{
+                                    padding: '1.5rem',
+                                    cursor: mergeMode ? 'pointer' : 'default',
+                                    border: isSelected ? '2px solid var(--primary)' : undefined,
+                                    transition: 'border 0.2s ease'
+                                }}
+                                onClick={() => mergeMode && toggleSelect(wb.id)}
+                            >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    {mergeMode && (
+                                        <div style={{
+                                            width: '24px', height: '24px', borderRadius: '6px',
+                                            border: isSelected ? 'none' : '2px solid rgba(255,255,255,0.2)',
+                                            background: isSelected ? 'var(--primary)' : 'transparent',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            marginRight: '0.75rem', marginTop: '0.1rem', flexShrink: 0,
+                                            transition: 'all 0.2s ease'
+                                        }}>
+                                            {isSelected && <Check size={14} style={{ color: '#fff' }} />}
+                                        </div>
+                                    )}
                                     <div style={{ flex: 1 }}>
                                         <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             <FileText size={20} style={{ color: 'var(--primary)' }} />
@@ -419,6 +488,77 @@ function WordbookPage() {
                             </button>
                             <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>
                                 {loading ? (<><Loader2 size={16} className="spin" /> 处理中...</>) : (<><Upload size={16} /> 创建并导入</>)}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Merge Floating Bar */}
+            {mergeMode && selectedIds.size >= 2 && (
+                <div style={{
+                    position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
+                    background: 'linear-gradient(135deg, #4f46e5, #6366f1)', borderRadius: '1rem',
+                    padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem',
+                    boxShadow: '0 8px 32px rgba(99, 102, 241, 0.4)', zIndex: 999,
+                    color: '#fff', fontSize: '0.9rem', fontWeight: '600'
+                }}>
+                    <span>已选 {selectedIds.size} 个单词本</span>
+                    <button
+                        className="btn"
+                        style={{ background: '#fff', color: '#4f46e5', padding: '0.5rem 1.25rem', fontWeight: '700', borderRadius: '0.75rem' }}
+                        onClick={(e) => { e.stopPropagation(); setShowMergeModal(true); }}
+                    >
+                        <Merge size={16} /> 合并
+                    </button>
+                </div>
+            )}
+
+            {/* Merge Modal */}
+            {showMergeModal && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+                }} onClick={() => !merging && setShowMergeModal(false)}>
+                    <div className="glass-card" style={{
+                        padding: '2rem', width: '90%', maxWidth: '500px'
+                    }} onClick={e => e.stopPropagation()}>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem' }}>
+                            🔀 合并 {selectedIds.size} 个单词本
+                        </h2>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                            合并将保留已有的快刷记录，相同单词会自动去重
+                        </p>
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.875rem' }}>
+                                新单词本名称 *
+                            </label>
+                            <input
+                                className="input-field"
+                                placeholder="例如：合并后的四六级词汇"
+                                value={mergeName}
+                                onChange={e => setMergeName(e.target.value)}
+                                disabled={merging}
+                            />
+                        </div>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.875rem' }}>
+                                描述（可选）
+                            </label>
+                            <input
+                                className="input-field"
+                                placeholder="例如：这是合并后的单词本"
+                                value={mergeDesc}
+                                onChange={e => setMergeDesc(e.target.value)}
+                                disabled={merging}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-secondary" onClick={() => setShowMergeModal(false)} disabled={merging}>
+                                取消
+                            </button>
+                            <button className="btn btn-primary" onClick={handleMerge} disabled={merging || !mergeName.trim()}>
+                                {merging ? (<><Loader2 size={16} className="spin" /> 合并中...</>) : (<><Merge size={16} /> 确认合并</>)}
                             </button>
                         </div>
                     </div>

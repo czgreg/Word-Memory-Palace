@@ -190,6 +190,35 @@ const RoomDetailPage = () => {
         }
     };
 
+    // 词性颜色映射
+    const posColorMap = {
+        'n': '#60a5fa',      // 名词 - 蓝色
+        'noun': '#60a5fa',
+        'v': '#f472b6',      // 动词 - 粉色
+        'verb': '#f472b6',
+        'adj': '#fbbf24',    // 形容词 - 黄色
+        'adjective': '#fbbf24',
+        'adv': '#34d399',    // 副词 - 绿色
+        'adverb': '#34d399',
+        'prep': '#c084fc',   // 介词 - 紫色
+        'preposition': '#c084fc',
+        'conj': '#fb923c',   // 连词 - 橙色
+        'conjunction': '#fb923c',
+        'pron': '#22d3ee',   // 代词 - 青色
+        'pronoun': '#22d3ee',
+        'det': '#a78bfa',    // 限定词 - 淡紫
+        'determiner': '#a78bfa',
+        'interj': '#f87171', // 感叹词 - 红色
+        'interjection': '#f87171',
+    };
+
+    const getPosColor = (word) => {
+        const w = words.find(item => item.word.trim().toLowerCase() === word.toLowerCase());
+        if (!w || !w.part_of_speech) return 'var(--warning)';
+        const pos = w.part_of_speech.replace(/\./g, '').trim().toLowerCase();
+        return posColorMap[pos] || 'var(--warning)';
+    };
+
     const renderHighlightedStory = () => {
         if (!story) return <span style={{ color: 'var(--text-muted)' }}>尚未编写故事...</span>;
 
@@ -214,11 +243,16 @@ const RoomDetailPage = () => {
                 content = line.substring(4);
             }
 
+            // Handle list items
+            if (content.startsWith('- ')) {
+                content = content.substring(2);
+                style = { ...style, paddingLeft: '1rem' };
+            }
+
             // 2. Fragment rendering (Bold + Words)
             const renderFragments = (text) => {
                 if (validWords.length === 0 && !text.includes('**')) return text;
 
-                // Regex for both bold and valid words
                 const wordRegexPart = validWords.length > 0
                     ? `|${validWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}`
                     : '';
@@ -228,17 +262,20 @@ const RoomDetailPage = () => {
                 return parts.map((part, i) => {
                     // Check if Bold
                     if (part.startsWith('**') && part.endsWith('**')) {
-                        return <strong key={i} style={{ color: 'var(--warning)' }}>{part.slice(2, -2)}</strong>;
+                        const boldWord = part.slice(2, -2);
+                        const color = getPosColor(boldWord);
+                        return <strong key={i} style={{ color }}>{boldWord}</strong>;
                     }
                     // Check if Word Match
                     const isMatch = validWords.includes(part.toLowerCase());
                     if (isMatch) {
+                        const color = getPosColor(part);
                         return (
                             <span key={i} style={{
-                                color: 'var(--text)',
+                                color,
                                 fontWeight: 'bold',
-                                borderBottom: '2px solid var(--primary)',
-                                background: 'rgba(99, 102, 241, 0.2)',
+                                borderBottom: `2px solid ${color}`,
+                                background: `${color}22`,
                                 padding: '0 2px'
                             }}>
                                 {part}
@@ -403,6 +440,21 @@ const RoomDetailPage = () => {
                         <h3 style={{ fontSize: '1rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>故事预览 (即时高亮)</h3>
                         <div style={{ lineHeight: '1.8', fontSize: '1.1rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.75rem', minHeight: '100px', whiteSpace: 'pre-wrap' }}>
                             {renderHighlightedStory()}
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.75rem', fontSize: '0.75rem' }}>
+                            {[
+                                ['n.', '名词', '#60a5fa'],
+                                ['v.', '动词', '#f472b6'],
+                                ['adj.', '形容词', '#fbbf24'],
+                                ['adv.', '副词', '#34d399'],
+                                ['prep.', '介词', '#c084fc'],
+                                ['conj.', '连词', '#fb923c'],
+                            ].map(([pos, label, color]) => (
+                                <span key={pos} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: color, display: 'inline-block' }} />
+                                    <span style={{ color: 'var(--text-muted)' }}>{pos} {label}</span>
+                                </span>
+                            ))}
                         </div>
                     </div>
                 </div>

@@ -193,5 +193,64 @@ export const wordbookRepository = {
             `UPDATE wordbook_entries SET part_of_speech = ?, meaning = ? WHERE id = ?`,
             [partOfSpeech, meaning, entryId]
         );
+    },
+
+    /**
+     * 合并多个单词本到新单词本，保留快刷数据
+     * 同一单词去重：优先保留已有快刷记录的版本
+     */
+    mergeWordbooks: async (name, description, wordbookIds) => {
+        if (!wordbookIds || wordbookIds.length < 2) throw new Error('至少选择 2 个单词本进行合并');
+
+        // 1. 创建新单词本
+        const result = await dbService.run(
+            `INSERT INTO wordbooks (name, description) VALUES (?, ?)`,
+            [name, description]
+        );
+        const newId = result.lastInsertRowid;
+
+        // 2. 查询所有选中单词本的词条
+        const placeholders = wordbookIds.map(() => '?').join(',');
+        const allEntries = await dbService.query(
+            `SELECT * FROM wordbook_entries WHERE wordbook_id IN (${placeholders}) ORDER BY id ASC`,
+            wordbookIds
+        );
+
+        // 3. 按 word 去重：优先保留有快刷记录的（is_known != -1）
+        const wordMap = new Map();
+        for (const entry of allEntries) {
+            const key = entry.word.toLowerCase();
+            const existing = wordMap.get(key);
+            if (!existing) {
+                wordMap.set(key, entry);
+            } else {
+                // 如果新条目有快刷记录而旧条目没有，替换
+                if (existing.is_known === -1 && entry.is_known !== -1) {
+                    wordMap.set(key, entry);
+                }
+            }
+        }
+
+        // 4. 批量插入到新单词本
+        const uniqueEntries = Array.from(wordMap.values());
+        const statements = uniqueEntries.map(e => ({
+            sql: `INSERT INTO wordbook_entries (wordbook_id, word, part_of_speech, meaning, is_known, review_round) VALUES (?, ?, ?, ?, ?, ?)`,
+            params: [newId, e.word, e.part_of_speech, e.meaning, e.is_known, e.review_round]
+        }));
+
+        // 分片批量执行
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+            const chunk = statements.slice(i, i + CHUNK_SIZE);
+            await dbService.runBatch(chunk);
+        }
+
+        // 5. 更新总词数
+        await dbService.run(
+            `UPDATE wordbooks SET total_words = (SELECT COUNT(*) FROM wordbook_entries WHERE wordbook_id = ?) WHERE id = ?`,
+            [newId, newId]
+        );
+
+        return { id: newId, count: uniqueEntries.length };
     }
 };

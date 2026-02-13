@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Volume2, ChevronLeft, ChevronRight, Trophy, BookOpen, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Volume2, ChevronLeft, ChevronRight, Trophy, BookOpen, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { useDatabase } from '../hooks/useDatabase';
 import { roomRepository } from '../db/repositories/roomRepository';
 import { wordRepository } from '../db/repositories/wordRepository';
 import { storyRepository } from '../db/repositories/storyRepository';
+import { aiService } from '../utils/aiService';
 import { useSpeech } from '../hooks/useSpeech';
 
 const LearnPage = () => {
@@ -18,6 +19,7 @@ const LearnPage = () => {
     const [story, setStory] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [currentWordIdx, setCurrentWordIdx] = useState(0);
+    const [regenerating, setRegenerating] = useState(false);
 
     const fetchData = useCallback(async () => {
         if (!isReady) return;
@@ -48,6 +50,28 @@ const LearnPage = () => {
 
     const handleFinish = async () => {
         navigate(`/room/${id}/sentence-practice`);
+    };
+
+    const handleRegenerateStory = async () => {
+        if (!aiService.isConfigured()) {
+            alert('请先在设置中配置 AI API');
+            return;
+        }
+        setRegenerating(true);
+        try {
+            const wordsForAI = words.map(w => ({
+                word: w.word,
+                part_of_speech: w.part_of_speech || '',
+                meaning: w.meaning
+            }));
+            const newStory = await aiService.generateRoomStory(room?.name || '未命名', wordsForAI);
+            setStory(newStory);
+            await storyRepository.upsert(id, newStory);
+        } catch (err) {
+            alert('重新生成失败: ' + err.message);
+        } finally {
+            setRegenerating(false);
+        }
     };
 
     const wordMap = useMemo(() => {
@@ -81,7 +105,7 @@ const LearnPage = () => {
 
     const getPosStyle = useCallback((pos) => {
         if (!pos) return posColorMap.default;
-        const key = pos.toLowerCase().trim();
+        const key = pos.replace(/\./g, '').toLowerCase().trim();
         return posColorMap[key] || posColorMap.default;
     }, [posColorMap]);
 
@@ -109,6 +133,12 @@ const LearnPage = () => {
                 content = line.substring(4);
             }
 
+            // Handle list items
+            if (content.startsWith('- ')) {
+                content = content.substring(2);
+                style = { ...style, paddingLeft: '1rem' };
+            }
+
             // 2. Fragment rendering (Bold + Interactive Words with POS-based colors)
             const renderFragments = (text) => {
                 const wordRegexPart = validWords.length > 0
@@ -118,9 +148,21 @@ const LearnPage = () => {
                 const parts = text.split(regex);
 
                 return parts.map((part, i) => {
-                    // Check if Bold
+                    // Check if Bold — use POS color
                     if (part.startsWith('**') && part.endsWith('**')) {
-                        return <strong key={i} style={{ color: 'var(--warning)' }}>{part.slice(2, -2)}</strong>;
+                        const boldWord = part.slice(2, -2);
+                        const w = wordMap[boldWord.toLowerCase()];
+                        const posStyle = w ? getPosStyle(w.part_of_speech) : posColorMap.default;
+                        return (
+                            <strong
+                                key={i}
+                                onClick={() => speak(boldWord)}
+                                title={w ? `${w.part_of_speech}: ${w.meaning}` : ''}
+                                style={{ color: posStyle.color, cursor: 'pointer' }}
+                            >
+                                {boldWord}
+                            </strong>
+                        );
                     }
 
                     // Check if Word Match — 根据词性使用不同颜色
@@ -192,6 +234,17 @@ const LearnPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '2rem', alignItems: 'start' }}>
                 {/* Story Area */}
                 <div className="glass-card" style={{ padding: '2rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-muted)' }}>📖 记忆故事</h3>
+                        <button
+                            className="btn btn-secondary"
+                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+                            onClick={handleRegenerateStory}
+                            disabled={regenerating}
+                        >
+                            {regenerating ? (<><Loader2 size={14} className="animate-spin" /> 生成中...</>) : (<><RefreshCw size={14} /> 重新生成</>)}
+                        </button>
+                    </div>
                     <div style={{
                         lineHeight: '2',
                         fontSize: '1.25rem',
@@ -200,6 +253,21 @@ const LearnPage = () => {
                         letterSpacing: '0.02em'
                     }}>
                         {renderStory()}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem', fontSize: '0.7rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem' }}>
+                        {[
+                            ['n.', '名词', '#818cf8'],
+                            ['v.', '动词', '#fb923c'],
+                            ['adj.', '形容词', '#4ade80'],
+                            ['adv.', '副词', '#f472b6'],
+                            ['prep.', '介词', '#fbbf24'],
+                            ['conj.', '连词', '#a78bfa'],
+                        ].map(([pos, label, color]) => (
+                            <span key={pos} style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: color, display: 'inline-block' }} />
+                                <span style={{ color: 'var(--text-muted)' }}>{pos} {label}</span>
+                            </span>
+                        ))}
                     </div>
                 </div>
 
